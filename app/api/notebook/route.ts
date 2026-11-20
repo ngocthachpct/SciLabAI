@@ -5,6 +5,7 @@ import { badgeForCount } from "@/lib/badges";
 import { isValidReagent } from "@/lib/reagents";
 import { pairKey } from "@/lib/pairKey";
 import { lookupEquation, lookupEquationCached } from "@/lib/engine";
+import { SIM_TASK_LABELS, isSimKey } from "@/lib/sim";
 
 export const runtime = "nodejs";
 
@@ -58,7 +59,13 @@ export async function GET(req: NextRequest) {
 const PostSchema = z.object({
   name: z.string().max(64),
   key: z.string().max(80),
+  label: z.string().max(200).optional(),
 });
+
+function sanitizeLabel(raw: string | undefined): string {
+  if (!raw) return "Nhiệm vụ mô phỏng";
+  return raw.replace(CONTROL_CHARS, "").trim().slice(0, 200) || "Nhiệm vụ mô phỏng";
+}
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -77,19 +84,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_name" }, { status: 400 });
   }
 
-  // The client sends a pair key only; the server derives the trustworthy equation
-  const ids = parsed.data.key.split("+");
-  if (ids.length !== 2 || !isValidReagent(ids[0]) || !isValidReagent(ids[1])) {
-    return NextResponse.json({ error: "bad_key" }, { status: 400 });
-  }
-  const key = pairKey(ids[0], ids[1]);
+  const rawKey = parsed.data.key;
+  let key = rawKey;
+  let equation: string;
 
-  const equation = (await lookupEquation(key)) ?? (await lookupEquationCached(key));
-  if (!equation) {
-    return NextResponse.json(
-      { error: "unknown_pair", message: "Cặp chất này chưa có kết quả đã kiểm tra." },
-      { status: 400 }
-    );
+  if (isSimKey(rawKey)) {
+    const parts = rawKey.split(":");
+    if (parts.length !== 3 || !parts[1] || !parts[2]) {
+      return NextResponse.json({ error: "bad_key" }, { status: 400 });
+    }
+    key = rawKey;
+    equation = SIM_TASK_LABELS[rawKey] ?? sanitizeLabel(parsed.data.label);
+  } else {
+    const ids = rawKey.split("+");
+    if (ids.length !== 2 || !isValidReagent(ids[0]) || !isValidReagent(ids[1])) {
+      return NextResponse.json({ error: "bad_key" }, { status: 400 });
+    }
+    key = pairKey(ids[0], ids[1]);
+    const found = (await lookupEquation(key)) ?? (await lookupEquationCached(key));
+    if (!found) {
+      return NextResponse.json(
+        { error: "unknown_pair", message: "Cặp chất này chưa có kết quả đã kiểm tra." },
+        { status: 400 }
+      );
+    }
+    equation = found;
   }
 
   const db = getDb();

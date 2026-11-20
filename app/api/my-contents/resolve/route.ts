@@ -5,7 +5,6 @@ import { z } from "zod";
 import {
   ContentKindSchema,
   LessonPayloadSchema,
-  type ContentKind,
   type LessonPayload,
 } from "@/lib/content";
 import {
@@ -13,6 +12,12 @@ import {
   generateSiblingKindContent,
 } from "@/lib/gemini";
 import { getDb, DB_NOT_CONFIGURED_MESSAGE } from "@/lib/db";
+import { getClientIp } from "@/lib/requestIdentity";
+import {
+  canGenerate,
+  recordGeneration,
+  PRO_REQUIRED_MESSAGE,
+} from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -143,10 +148,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Derive or generate
-    let newPayload: LessonPayload =
-      deriveSiblingWithoutLlm(sourcePayload, targetKind) ??
-      (await generateSiblingKindContent(sourcePayload, targetKind));
+    // Derive without calling the LLM when possible (costs no quota).
+    const derived = deriveSiblingWithoutLlm(sourcePayload, targetKind);
+    let newPayload: LessonPayload;
+
+    if (derived) {
+      newPayload = derived;
+    } else {
+      const ip = getClientIp(req);
+      const quota = await canGenerate(userId, ip);
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            error: "pro_required",
+            message: PRO_REQUIRED_MESSAGE,
+            upgradeUrl: "/pro",
+            plan: quota.status,
+          },
+          { status: 402 }
+        );
+      }
+      newPayload = await generateSiblingKindContent(sourcePayload, targetKind);
+      await recordGeneration(userId, ip, "sibling_kind");
+    }
 
     // Keep meta aligned with source row
     newPayload = {

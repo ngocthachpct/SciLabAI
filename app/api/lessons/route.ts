@@ -11,6 +11,7 @@ export async function GET() {
     lessons: LESSONS.map((l) => ({
       id: l.id,
       grade: l.grade,
+      subject: l.subject,
       order: l.order,
       title: l.title,
       description: l.description,

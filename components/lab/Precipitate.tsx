@@ -31,7 +31,7 @@ export function Precipitate({ color, count = 20 }: PrecipitateProps) {
       {grains.map((g, i) => (
         <span
           key={i}
-          className="chemlab-precipitate absolute rounded-[3px]"
+          className="scilab-precipitate absolute rounded-[3px]"
           style={
             {
               bottom: "10px",
@@ -40,7 +40,7 @@ export function Precipitate({ color, count = 20 }: PrecipitateProps) {
               height: `${g.size}px`,
               backgroundColor: color,
               opacity: 0,
-              "--chemlab-delay": `${g.delay}s`,
+              "--scilab-delay": `${g.delay}s`,
             } as CSSProperties
           }
         />

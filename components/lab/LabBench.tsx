@@ -22,6 +22,7 @@ export interface AnalysisOutput {
   result: ReactionResult | null;
   source: "local" | "cache" | "ai";
   message?: string;
+  upgradeUrl?: string;
   isNew?: boolean;
 }
 
@@ -167,7 +168,14 @@ export function LabBench({
         );
       } else {
         setObserving(false);
-        onResult({ a, b, result: null, source: "local", message: res.message });
+        onResult({
+          a,
+          b,
+          result: null,
+          source: "local",
+          message: res.message,
+          upgradeUrl: "upgradeUrl" in res ? res.upgradeUrl : undefined,
+        });
       }
     };
 

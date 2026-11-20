@@ -29,6 +29,7 @@ function ReviewClient() {
   const params = useSearchParams();
   const lessonId = params.get("lesson");
   const contentId = params.get("content");
+  const demo = params.get("demo") === "1";
   const lesson = getLesson(lessonId);
 
   const [payload, setPayload] = useState<LessonPayload | null>(null);
@@ -118,6 +119,8 @@ function ReviewClient() {
           current="review"
           contentId={contentId}
           lessonId={lesson?.id ?? null}
+          subject={payload?.subject ?? lesson?.subject ?? null}
+          demo={demo}
         />
         <Sparkle tone="#f2c14e" size={16} delay="0.3s" />
       </header>

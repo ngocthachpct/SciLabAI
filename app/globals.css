@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ====== ChemLab Retro × Illustration design tokens ====== */
+/* ====== SciLab Retro × Illustration design tokens ====== */
 @theme inline {
   --color-paper: #faf3e3;
   --color-paper-deep: #f0e3c8;
@@ -187,7 +187,7 @@ body {
 }
 
 /* Wave loading letters (sticker UI) */
-@keyframes chemlab-wave {
+@keyframes scilab-wave {
   0%,
   100% {
     transform: translateY(0);
@@ -200,8 +200,8 @@ body {
   }
 }
 
-.chemlab-wave-char {
-  animation-name: chemlab-wave;
+.scilab-wave-char {
+  animation-name: scilab-wave;
   animation-duration: 1.05s;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
@@ -209,46 +209,46 @@ body {
 }
 
 /* Particle helpers — use CSS vars so SSR/client hydration matches (no inline animation shorthand) */
-.chemlab-bubble {
+.scilab-bubble {
   animation-name: bubble-rise;
   animation-timing-function: ease-out;
   animation-iteration-count: infinite;
-  animation-duration: var(--chemlab-dur, 1.4s);
-  animation-delay: var(--chemlab-delay, 0s);
+  animation-duration: var(--scilab-dur, 1.4s);
+  animation-delay: var(--scilab-delay, 0s);
 }
 
-.chemlab-precipitate {
+.scilab-precipitate {
   animation-name: precipitate-fall;
   animation-duration: 0.9s;
   animation-timing-function: ease-in;
   animation-fill-mode: forwards;
-  animation-delay: var(--chemlab-delay, 0s);
+  animation-delay: var(--scilab-delay, 0s);
 }
 
-.chemlab-smoke {
+.scilab-smoke {
   animation-name: smoke-rise;
   animation-timing-function: ease-out;
   animation-iteration-count: infinite;
-  animation-duration: var(--chemlab-dur, 2.4s);
-  animation-delay: var(--chemlab-delay, 0s);
+  animation-duration: var(--scilab-dur, 2.4s);
+  animation-delay: var(--scilab-delay, 0s);
 }
 
 /* Respect users who prefer reduced motion: kill looping animations */
 @media (prefers-reduced-motion: reduce) {
-  .chemlab-loop,
-  .chemlab-bubble,
-  .chemlab-smoke {
+  .scilab-loop,
+  .scilab-bubble,
+  .scilab-smoke {
     animation: none !important;
   }
-  .chemlab-precipitate {
+  .scilab-precipitate {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-  .chemlab-twinkle {
+  .scilab-twinkle {
     animation: none !important;
   }
-  .chemlab-wave-char {
+  .scilab-wave-char {
     animation: none !important;
   }
 }

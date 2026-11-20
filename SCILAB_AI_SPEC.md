@@ -1,4 +1,4 @@
-# ChemLab AI – Phòng Thí Nghiệm Hóa Học Ảo (Spec cho AI Agent)
+# SciLab AI – Phòng Thí nghiệm Khoa học ảo (Spec cho AI Agent)
 
 > Tài liệu này dành cho AI coding agent (Claude Code, Cursor, v.v.). Hãy đọc toàn bộ trước khi viết code, làm tuần tự theo mục **13. Kế hoạch triển khai**, và tuân thủ mục **14. Quy tắc cho Agent**.
 
@@ -6,11 +6,13 @@
 
 ## 1. Tổng quan
 
-**ChemLab AI** là web app mô phỏng phòng thí nghiệm hóa học 2D cho học sinh THCS. Học sinh chọn 2 hóa chất, đổ vào cốc, xem hiện tượng (đổi màu, sủi bọt, kết tủa, tỏa nhiệt) bằng animation, rồi đọc phân tích do AI/dữ liệu có sẵn cung cấp (phương trình, phương trình ion rút gọn, giải thích, cảnh báo an toàn). Phản ứng đã khám phá được lưu vào "Sổ tay thí nghiệm" và mở khóa danh hiệu "Nhà Giả Kim Nhí".
+**SciLab AI** là web app phòng thí nghiệm khoa học ảo cho học sinh lớp 8, 9 với ba môn: Hóa học, Vật lý, Toán. Ở môn Hóa, học sinh chọn 2 hóa chất, đổ vào cốc, xem hiện tượng (đổi màu, sủi bọt, kết tủa, tỏa nhiệt) bằng animation 2D, rồi đọc phân tích do AI/dữ liệu có sẵn cung cấp. Với Lý/Toán, mỗi bài trong 8 bài học có một **mô phỏng tương tác riêng** (lực/ma sát, lực đẩy Archimedes, định luật Ohm, thấu kính hội tụ, hằng đẳng thức, phương trình bậc nhất, hàm số bậc nhất, tam giác vuông) kèm nhiệm vụ và nhận xét tự động. Kết quả khám phá được lưu vào "Sổ tay thí nghiệm" và mở khóa danh hiệu "Nhà Khoa Học Nhí".
 
-**Giá trị:** thực hành thí nghiệm không lo cháy nổ hay thiếu hóa chất.
+**Giá trị:** học và thực hành khoa học không lo cháy nổ, thiếu hóa chất hay thiếu thiết bị.
 
-**Giai đoạn hiện tại:** DEMO. Ưu tiên: chạy mượt, đẹp, ổn định khi trình diễn, **chi phí = 0 đồng** (chỉ dùng free tier).
+**Giai đoạn hiện tại:** DEMO. Mỗi danh tính (user đã đăng nhập hoặc IP của khách) có **1 lượt Gemini miễn phí trọn đời**, dùng chung cho tạo bài AI và phân tích phản ứng mới. Hết lượt phải nâng **SciLab Pro** (mock, không thanh toán thật) hoặc học nội dung có sẵn: bài SGK tĩnh và bài mẫu demo. Cache/local/sổ tay không tính quota; Pro vẫn chịu rate limit/phút.
+
+**Dữ liệu demo:** chạy `npm run db:init` rồi `npm run db:seed` để tạo 42 bản ghi `lesson_content` (14 bài × lý thuyết/flashcard/lab) với `source='demo'`, `owner_user_id=NULL`, hiển thị công khai ở nguồn **“Bài mẫu”** trên trang `/hoc`.
 
 ### Ràng buộc cứng
 - Chi phí 0: Vercel Hobby, Neon Free, Gemini API free tier.
@@ -42,7 +44,11 @@
 DATABASE_URL=postgres://...            # chuỗi kết nối Neon
 GEMINI_API_KEY=...                      # từ Google AI Studio
 GEMINI_MODEL=<tên model Flash hiện hành>
+GEMINI_MODEL_FALLBACKS=                # model dự phòng, phân tách bằng dấu phẩy
 RATE_LIMIT_PER_MINUTE=10               # số lần gọi AI / IP / phút
+FREE_AI_GENERATIONS=1                  # lượt AI miễn phí trọn đời / user hoặc IP
+ALLOW_DEMO_PRO=true                    # bật nâng Pro demo (không thanh toán)
+WARM_CACHE_TOKEN=                      # token để script warm-cache bỏ qua quota
 ```
 
 Tạo file `.env.example` với các key trên (không có giá trị thật). Không commit `.env.local`.
@@ -52,7 +58,7 @@ Tạo file `.env.example` với các key trên (không có giá trị thật). K
 ## 4. Cấu trúc thư mục
 
 ```
-chemlab-ai/
+scilab-ai/
 ├─ app/
 │  ├─ layout.tsx
 │  ├─ page.tsx                      # trang chính (Lab)
@@ -62,7 +68,9 @@ chemlab-ai/
 │     └─ notebook/route.ts          # GET/POST: sổ tay + danh hiệu
 ├─ components/
 │  ├─ lab/
-│  │  ├─ LabBench.tsx               # khu trung tâm
+│  │  ├─ LabBench.tsx               # khu trung tâm (Hóa)
+│  │  ├─ SimulationLab.tsx          # khung lab mô phỏng (Lý/Toán)
+│  │  ├─ sims/                      # 8 SVG stage + task/insight UI
 │  │  ├─ Beaker.tsx                 # cốc SVG + hiệu ứng
 │  │  ├─ Bubbles.tsx
 │  │  ├─ Precipitate.tsx
@@ -90,13 +98,16 @@ chemlab-ai/
 │  ├─ gemini.ts                     # gọi AI + prompt
 │  ├─ db.ts                         # kết nối Neon
 │  ├─ rateLimit.ts
-│  └─ badges.ts                     # tính danh hiệu từ số phản ứng
+│  ├─ badges.ts                     # tính danh hiệu từ số phản ứng
+│  ├─ sim.ts                        # schema/type/helper cho 8 mô phỏng
+│  ├─ sim-defaults.json             # cấu hình và nhiệm vụ mặc định
+│  └─ simResults.ts                 # tính toán nhận xét theo từng mô phỏng
 ├─ db/
 │  └─ schema.sql
 ├─ scripts/
 │  └─ warm-cache.ts                 # chạy trước demo để nạp cache
 ├─ .env.example
-└─ CHEMLAB_AI_SPEC.md               # file này
+└─ SCILAB_AI_SPEC.md                # file này
 ```
 
 ---
@@ -502,11 +513,11 @@ Nếu kết quả có sẵn từ Tầng 1/2, bỏ `ObservingLoader` và rút ng�
 
 
 ### Luồng mới (sau Bước 6) — Trang chủ / Chọn bài học / Lab theo bài học
-- [x] `lib/lessons.ts` — danh mục khối lớp 8/9 (chỉ môn Hóa học), 6 bài học hh8-1..3, hh9-1..3, mỗi bài có `defaultPairs` (task chips SGK, gồm cả cặp không phản ứng và cặp AI zn+agno3); tiền tố nội dung tĩnh `static:`.
+- [x] `lib/lessons.ts` — danh mục khối lớp 8/9 với 3 môn; 6 bài Hóa hh8-1..3/hh9-1..3 có `defaultPairs`, 8 bài Lý/Toán có mô phỏng riêng qua `lib/sim-defaults.json`; tiền tố nội dung tĩnh `static:`.
 - [x] `lib/content.ts` + bảng `lesson_content` trong `db/schema.sql` — lưu nội dung bài học (title/note/pairs) dạng JSONB, API `GET/POST /api/lessons/[id]/content` và `/import` (file ≤500KB .txt/.md/.json/.csv → Gemini generateLessonContent → validate → lưu DB).
 - [x] Trang `/` (Trang chủ mới): hero minh họa cốc 2D + Sparkles, hướng dẫn 5 bước "Nhà Giả Kim Nhí", banner an toàn (#b3402a), gate đăng nhập = NicknameDialog; đã đăng nhập → nút Tiếp tục sang `/hoc`.
-- [x] Trang `/hoc`: stepper 4 bước Khối lớp → Môn (Hóa học active, Vật lý/Toán 🔒 sắp ra mắt) → Bài học (fetch `/api/lessons`) → Nội dung ("SGK sẵn có" = `static:<lessonId>` hoặc danh sách nội dung đã lưu từ DB (tự chịu 503 khi thiếu DATABASE_URL) hoặc nhập file upload). Nút "Vào Lab" → `/lab?lesson=<id>&content=<cid>`.
-- [x] Trang `/lab` (trang lab cũ dời sang đây, `useSearchParams` bọc Suspense): đọc query `lesson`+`content`; `static:` dùng `defaultPairs`, còn lại fetch `GET /api/lessons/<id>/content?cid=` → payload; LessonTaskCard hiển thị task chips + trạng thái done (Set pairKey); header có "📚 Đổi bài học", nút về trang chủ, sound, badge, sổ tay; task chip click → chọn sẵn 2 hóa chất trên kệ.
+- [x] Trang `/hoc`: stepper 4 bước Khối lớp → Môn (Hóa học, Vật lý, Toán đều active) → Bài học (fetch `/api/lessons`) → Nội dung ("SGK sẵn có" = `static:<lessonId>` hoặc danh sách nội dung đã lưu từ DB (tự chịu 503 khi thiếu DATABASE_URL) hoặc nhập file upload). Nút "Vào Lab" → `/lab?lesson=<id>&content=<cid>`.
+- [x] Trang `/lab` (trang lab cũ dời sang đây, `useSearchParams` bọc Suspense): đọc query `lesson`+`content`; `static:` dùng `defaultPairs`/`sim`, còn lại fetch `GET /api/lessons/<id>/content?cid=` → payload. Hóa dùng LessonTaskCard + kệ hóa chất; Lý/Toán dùng `SimulationLab` (thanh trượt, SVG stage, task chip, bảng nhận xét). Header có "📚 Đổi bài học", nút về trang chủ, sound, badge, sổ tay; hoàn thành task ghi vào Sổ tay qua `sim:<lessonId>:<taskId>`.
 - [x] `npm run build` xanh, đã smoke-test runtime: `/`, `/hoc`, `/lab`, `/api/lessons` = 200; `/api/notebook` = 503 khi chưa có DATABASE_URL (graceful như thiết kế); lưu ý PowerShell: lần build song song dev server làm hỏng `.next` → luôn xóa `.next` trước khi restart dev.
 
 ## 17. Kịch bản demo 3 phút (Bước 7)

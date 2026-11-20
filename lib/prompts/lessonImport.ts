@@ -1,7 +1,13 @@
-import type { ContentKind, CustomImportContext } from "@/lib/content";
-import type { Lesson } from "@/lib/lessons";
+import type {
+  ContentKind,
+  ContentSubject,
+  CustomImportContext,
+} from "@/lib/content";
+import { SUBJECT_LABEL_VI, type Lesson } from "@/lib/lessons";
+import { SIM_PARAM_META, SIM_TYPE_LABEL_VI, SIM_TYPE_SUBJECT } from "@/lib/sim";
+import type { SimType } from "@/lib/sim";
 
-/** Shared reagent catalog block for all import modes (ids must match lib/reagents.ts). */
+/** Shared reagent catalog block for all chemistry import modes (ids must match lib/reagents.ts). */
 export function reagentCatalogBlock(): string {
   return [
     "CATALOG HÓA CHẤT HỢP LỆ (CHỈ dùng id trong bảng này, không tự tạo id mới):",
@@ -29,10 +35,13 @@ function lessonContext(lesson: Lesson): string {
     `Bài học mục tiêu trong app:`,
     `- lesson_id: ${lesson.id}`,
     `- grade: ${lesson.grade}`,
+    `- subject: ${lesson.subject} (${SUBJECT_LABEL_VI[lesson.subject]})`,
     `- title: ${lesson.title}`,
     `- description: ${lesson.description}`,
-    `- defaultPairs gợi ý (có thể điều chỉnh theo tài liệu, nhưng vẫn phải ∈ catalog):`,
-    pairs,
+    lesson.defaultPairs.length > 0
+      ? "- defaultPairs gợi ý (có thể điều chỉnh theo tài liệu, nhưng vẫn phải ∈ catalog):\n" +
+        pairs
+      : "- defaultPairs: không áp dụng cho môn này (pairs phải là []).",
   ].join("\n");
 }
 
@@ -40,22 +49,81 @@ function customContext(ctx: CustomImportContext): string {
   return [
     "Ngữ cảnh bài tự tạo (không gắn bài SGK catalog):",
     `- grade: lớp ${ctx.grade}`,
-    `- subject: hóa học THCS`,
+    `- subject: ${ctx.subject} (${SUBJECT_LABEL_VI[ctx.subject]})`,
     `- kind: ${ctx.kind}`,
-    "Đọc tài liệu và tạo nội dung phù hợp khối lớp + chức năng; title/note do AI đặt theo tài liệu.",
+    "Đọc tài liệu và tạo nội dung phù hợp khối lớp + môn + chức năng; title/note do AI đặt theo tài liệu.",
   ].join("\n");
 }
 
-const SHARED_RULES = [
-  "Bạn là giáo viên Hóa học THCS Việt Nam.",
-  "Chỉ dùng kiến thức đúng chương trình THCS; không bịa phản ứng.",
-  "Mọi id hóa chất phải thuộc catalog. pair dùng {\"a\":\"id\",\"b\":\"id\"}, a ≠ b.",
-  "Giọng thân thiện học sinh lớp 8–9, tiếng Việt.",
-  "Không hướng dẫn điều chế chất nguy hiểm ngoài đời; chỉ giải thích bản chất.",
-  "Chỉ trả về JSON thuần (không markdown, không giải thích ngoài JSON).",
-].join("\n");
+function sharedRules(subject: ContentSubject): string {
+  const base = [
+    `Bạn là giáo viên ${SUBJECT_LABEL_VI[subject]} THCS Việt Nam.`,
+    "Chỉ dùng kiến thức đúng chương trình THCS; không bịa nội dung.",
+    "Giọng thân thiện học sinh lớp 8–9, tiếng Việt.",
+    "Chỉ trả về JSON thuần (không markdown, không giải thích ngoài JSON).",
+  ];
 
-function schemaForKind(kind: ContentKind, cardIdPrefix: string): string {
+  if (subject === "chemistry") {
+    return [
+      ...base,
+      "Mọi id hóa chất phải thuộc catalog. pair dùng {\"a\":\"id\",\"b\":\"id\"}, a ≠ b.",
+      "Không hướng dẫn điều chế chất nguy hiểm ngoài đời; chỉ giải thích bản chất.",
+    ].join("\n");
+  }
+
+  return [
+    ...base,
+    "Môn này không dùng hóa chất: trường pairs phải là []; dùng trường sim cho thí nghiệm mô phỏng.",
+    "Không đưa công thức, số liệu hoặc kết luận sai; ưu tiên giải thích trọng tâm và ví dụ chuẩn.",
+  ].join("\n");
+}
+
+function simCatalogBlock(subject: ContentSubject): string {
+  const types = (Object.keys(SIM_TYPE_SUBJECT) as SimType[])
+    .filter((type) => SIM_TYPE_SUBJECT[type] === subject)
+    .map((type) => {
+      const params = SIM_PARAM_META[type]
+        .map((p) => `${p.key} [${p.min}..${p.max}], bước ${p.step}${p.unit ? `, đơn vị ${p.unit}` : ""}`)
+        .join("; ");
+      return `- ${type} (${SIM_TYPE_LABEL_VI[type]}): ${params}`;
+    });
+  return [
+    "CATALOG MÔ PHỎNG HỢP LỆ (chỉ chọn 1 type trong danh sách này):",
+    ...types,
+    "Trường sim gồm: type, params (đối tượng số các tham số ở trên), tasks (1–5 nhiệm vụ; mỗi task có id, prompt, target là tập tham số cần đạt, hint tùy chọn).",
+    "Giá trị params phải nằm trong khoảng cho phép; target phải khớp với một bộ params cụ thể.",
+  ].join("\n");
+}
+
+function simSchemaHint(subject: ContentSubject): Record<string, unknown> {
+  const types = (Object.keys(SIM_TYPE_SUBJECT) as SimType[]).filter(
+    (type) => SIM_TYPE_SUBJECT[type] === subject
+  );
+  const first = types[0] ?? "force-motion";
+  return {
+    type: types.join("|"),
+    params: Object.fromEntries(
+      SIM_PARAM_META[first].map((p) => [p.key, `số ${p.min}..${p.max}`])
+    ),
+    tasks: [
+      {
+        id: `${first}-01`,
+        prompt: "Yêu cầu ngắn gọn bằng tiếng Việt ≤200",
+        target: Object.fromEntries(
+          SIM_PARAM_META[first].map((p) => [p.key, "số trong khoảng"])
+        ),
+        hint: "tùy chọn ≤200",
+      },
+    ],
+  };
+}
+
+function schemaForKind(
+  kind: ContentKind,
+  cardIdPrefix: string,
+  subject: ContentSubject
+): string {
+  const simHint = subject === "chemistry" ? undefined : simSchemaHint(subject);
   if (kind === "theory") {
     return JSON.stringify(
       {
@@ -63,8 +131,9 @@ function schemaForKind(kind: ContentKind, cardIdPrefix: string): string {
         title: "string ≤120",
         note: "string ≤600",
         grade: "8|9",
-        subject: "chemistry",
-        pairs: [{ a: "reagent_id", b: "reagent_id" }],
+        subject,
+        pairs: subject === "chemistry" ? [{ a: "reagent_id", b: "reagent_id" }] : [],
+        sim: simHint,
         theory: {
           summary: "tóm tắt ≤800",
           sections: [{ heading: "≤120", body: "≤1200", tip: "optional ≤300" }],
@@ -82,14 +151,15 @@ function schemaForKind(kind: ContentKind, cardIdPrefix: string): string {
         title: "Ôn tập — ...",
         note: "string ≤600",
         grade: "8|9",
-        subject: "chemistry",
-        pairs: [{ a: "reagent_id", b: "reagent_id" }],
+        subject,
+        pairs: subject === "chemistry" ? [{ a: "reagent_id", b: "reagent_id" }] : [],
+        sim: simHint,
         cards: [
           {
             id: `${cardIdPrefix}-01`,
             front: "Câu hỏi ≤280?",
             back: "Đáp án ≤500",
-            tag: "Lý thuyết|Thí nghiệm|Không phản ứng|An toàn|Quiz",
+            tag: "Lý thuyết|Thí nghiệm|Không phản ứng|An toàn|Quiz|Công thức|Bài tập|Ví dụ",
           },
         ],
       },
@@ -103,20 +173,23 @@ function schemaForKind(kind: ContentKind, cardIdPrefix: string): string {
       title: "string ≤120",
       note: "string ≤600",
       grade: "8|9",
-      subject: "chemistry",
-      pairs: [{ a: "reagent_id", b: "reagent_id" }],
+      subject,
+      pairs: subject === "chemistry" ? [{ a: "reagent_id", b: "reagent_id" }] : [],
+      sim: simHint,
     },
     null,
     2
   );
 }
 
-function taskForKind(kind: ContentKind): string[] {
+function taskForKind(kind: ContentKind, subject: ContentSubject): string[] {
   if (kind === "theory") {
     return [
       "CHỨC NĂNG: theory — tạo giáo án lý thuyết để lưu DB và trang Học lý thuyết tái sử dụng.",
       "Nhiệm vụ: đọc tài liệu, viết lý thuyết đúng trọng tâm (không lan man).",
-      "Đồng thời chọn 1–8 pairs thí nghiệm minh họa (nếu có) để sau này mở Lab.",
+      subject === "chemistry"
+        ? "Đồng thời chọn 1–8 pairs thí nghiệm minh họa (nếu có) để sau này mở Lab."
+        : "Không dùng pairs; kèm 1 đối tượng sim phù hợp để các chế độ học dùng chung.",
       "Yêu cầu theory.sections: 2–6 mục; theory.remember: 3–6 ý ngắn.",
     ];
   }
@@ -124,16 +197,23 @@ function taskForKind(kind: ContentKind): string[] {
     return [
       "CHỨC NĂNG: flashcards — tạo bộ câu hỏi/đáp án flash card để lưu DB.",
       "Mỗi thẻ: front = CÂU HỎI rõ (không dùng 'Ghi nhớ #1'); back = đáp án + giải thích ngắn.",
-      "Phân bố: 3–5 Lý thuyết, 3–6 Thí nghiệm, 1–2 Không phản ứng (nếu có), 1–2 An toàn — tổng 8–14 thẻ.",
-      "Cũng trả pairs (1–12) để bộ nội dung dùng lại được ở Lab.",
-      "tag chỉ một trong: Lý thuyết | Thí nghiệm | Không phản ứng | An toàn | Quiz",
-      "Phương trình cân bằng; ↓ kết tủa; ↑ khí.",
+      "Phân bố: 3–5 Lý thuyết, 3–6 bài tập/ví dụ (hoặc thí nghiệm nếu Hóa), 1–2 An toàn/Không phản ứng nếu có — tổng 8–14 thẻ.",
+      subject === "chemistry"
+        ? "Cũng trả pairs (1–12) để bộ nội dung dùng lại được ở Lab."
+        : "Không dùng pairs; kèm 1 đối tượng sim phù hợp để chuyển sang Lab không tốn lượt AI.",
+      "tag chỉ một trong: Lý thuyết | Thí nghiệm | Không phản ứng | An toàn | Quiz | Công thức | Bài tập | Ví dụ",
+      subject === "chemistry"
+        ? "Phương trình cân bằng; ↓ kết tủa; ↑ khí."
+        : "Công thức và kết quả tính toán phải chính xác theo chương trình THCS.",
     ];
   }
   return [
     "CHỨC NĂNG: lab — tạo bộ thí nghiệm để lưu DB và mở Phòng thí nghiệm.",
     "Nhiệm vụ: đọc tài liệu, chọn 1–12 cặp thí nghiệm phù hợp.",
     "Ưu tiên hiện tượng rõ (kết tủa, khí, đổi màu, tỏa nhiệt). Có thể thêm ≤2 cặp không phản ứng.",
+    subject === "chemistry"
+      ? "Chỉ dùng hóa chất trong catalog."
+      : "Chọn đúng 1 type trong CATALOG MÔ PHỎNG; params phải nằm trong khoảng; tạo 2–4 tasks với target khớp bộ params cụ thể; pairs phải là [].",
   ];
 }
 
@@ -141,28 +221,38 @@ function assemblePrompt(
   kind: ContentKind,
   contextBlock: string,
   fileText: string,
-  cardIdPrefix: string
+  cardIdPrefix: string,
+  subject: ContentSubject
 ): string {
-  return [
-    SHARED_RULES,
+  const blocks = [
+    sharedRules(subject),
     "",
-    ...taskForKind(kind),
+    ...taskForKind(kind, subject),
     "",
     contextBlock,
     "",
-    reagentCatalogBlock(),
-    "",
+  ];
+
+  if (subject === "chemistry") {
+    blocks.push(reagentCatalogBlock(), "");
+  } else {
+    blocks.push(simCatalogBlock(subject), "");
+  }
+
+  blocks.push(
     "Schema JSON BẮT BUỘC (khớp lesson_content.payload):",
-    schemaForKind(kind, cardIdPrefix),
+    schemaForKind(kind, cardIdPrefix, subject),
     "",
     "NỘI DUNG TÀI LIỆU:",
     "```",
     fileText,
-    "```",
-  ].join("\n");
+    "```"
+  );
+
+  return blocks.join("\n");
 }
 
-/** Catalog-linked import (legacy / optional). */
+/** Catalog-linked import. */
 export function buildImportPrompt(
   kind: ContentKind,
   lesson: Lesson,
@@ -172,7 +262,8 @@ export function buildImportPrompt(
     kind,
     lessonContext(lesson),
     fileText.slice(0, 8000),
-    lesson.id
+    lesson.id,
+    lesson.subject
   );
 }
 
@@ -185,7 +276,8 @@ export function buildCustomImportPrompt(
     ctx.kind,
     customContext(ctx),
     fileText.slice(0, 8000),
-    `u${ctx.grade}`
+    `u${ctx.grade}`,
+    ctx.subject
   );
 }
 
@@ -195,26 +287,37 @@ export function buildCustomImportPrompt(
  */
 export function buildSiblingKindPrompt(
   targetKind: ContentKind,
-  sourceJson: string
+  sourceJson: string,
+  subject: ContentSubject
 ): string {
-  return [
-    SHARED_RULES,
+  const blocks = [
+    sharedRules(subject),
     "",
-    ...taskForKind(targetKind),
+    ...taskForKind(targetKind, subject),
     "",
     "Nhiệm vụ đặc biệt: dựa trên NỘI DUNG ĐÃ LƯU bên dưới (cùng một bài học của học sinh),",
     `tạo bản payload mới với kind="${targetKind}". Giữ title/note/grade/subject nhất quán nếu hợp lý.`,
-    "Tái sử dụng pairs đã có khi phù hợp; chỉ đổi/bổ sung nếu cần cho kind mới.",
-    "Không bịa hóa chất ngoài catalog.",
+    subject === "chemistry"
+      ? "Tái sử dụng pairs đã có khi phù hợp; chỉ đổi/bổ sung nếu cần cho kind mới."
+      : "Giữ pairs = []; tái sử dụng sim đã có nếu phù hợp, nếu không hãy tạo sim mới theo CATALOG MÔ PHỎNG.",
     "",
-    reagentCatalogBlock(),
-    "",
+  ];
+
+  if (subject === "chemistry") {
+    blocks.push("Không bịa hóa chất ngoài catalog.", "", reagentCatalogBlock(), "");
+  } else {
+    blocks.push(simCatalogBlock(subject), "");
+  }
+
+  blocks.push(
     "Schema JSON BẮT BUỘC:",
-    schemaForKind(targetKind, "sib"),
+    schemaForKind(targetKind, "sib", subject),
     "",
     "NỘI DUNG ĐÃ LƯU (JSON):",
     "```json",
     sourceJson.slice(0, 8000),
-    "```",
-  ].join("\n");
+    "```"
+  );
+
+  return blocks.join("\n");
 }

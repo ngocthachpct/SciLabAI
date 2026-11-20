@@ -11,6 +11,7 @@ import {
 } from "./content";
 import { getReagent } from "./reagents";
 import type { Lesson } from "./lessons";
+import { DEFAULT_SIMS, clampSimParams, isSimExperimentAllowed } from "./sim";
 import {
   buildCustomImportPrompt,
   buildImportPrompt,
@@ -223,19 +224,36 @@ export async function askGeminiWithRetry(
 
 /* ================= Lesson content generation (import flow by kind) ================= */
 
-function sanitizePayload(kind: ContentKind, raw: LessonPayload): LessonPayload {
-  const pairs = (raw.pairs ?? []).filter(
-    (p) =>
-      getReagent(p.a) !== undefined &&
-      getReagent(p.b) !== undefined &&
-      p.a !== p.b
-  );
+function sanitizePayload(
+  kind: ContentKind,
+  raw: LessonPayload,
+  subject: NonNullable<LessonPayload["subject"]>
+): LessonPayload {
+  const pairs =
+    subject === "chemistry"
+      ? (raw.pairs ?? []).filter(
+          (p) =>
+            getReagent(p.a) !== undefined &&
+            getReagent(p.b) !== undefined &&
+            p.a !== p.b
+        )
+      : [];
 
   if (kind === "lab") {
-    if (pairs.length === 0) {
-      throw new Error("Tài liệu không tạo thí nghiệm phù hợp với bảng hóa chất hiện có.");
+    if (subject === "chemistry") {
+      if (pairs.length === 0) {
+        throw new Error("Tài liệu không tạo thí nghiệm phù hợp với bảng hóa chất hiện có.");
+      }
+      return { ...raw, kind: "lab", pairs };
     }
-    return { ...raw, kind: "lab", pairs };
+    if (!raw.sim || !isSimExperimentAllowed(subject, raw.sim)) {
+      throw new Error("Tài liệu không tạo được mô phỏng phù hợp với môn học này.");
+    }
+    const sim = {
+      ...raw.sim,
+      params: clampSimParams(raw.sim.type, raw.sim.params),
+    };
+    return { ...raw, kind: "lab", pairs: [], sim };
   }
 
   if (kind === "theory") {
@@ -263,15 +281,15 @@ function parseJsonText(text: string): unknown {
 async function runLessonGeneration(
   contents: string,
   kind: ContentKind,
-  meta?: { grade?: LessonPayload["grade"]; subject?: LessonPayload["subject"] }
+  meta: { grade?: LessonPayload["grade"]; subject: NonNullable<LessonPayload["subject"]> }
 ): Promise<LessonPayload> {
   const parseAndValidate = (text: string): LessonPayload => {
     const parsed = LessonPayloadSchema.parse(parseJsonText(text));
-    const cleaned = sanitizePayload(kind, { ...parsed, kind });
+    const cleaned = sanitizePayload(kind, { ...parsed, kind }, meta.subject);
     return {
       ...cleaned,
-      grade: meta?.grade ?? cleaned.grade,
-      subject: meta?.subject ?? cleaned.subject ?? "chemistry",
+      grade: meta.grade ?? cleaned.grade,
+      subject: meta.subject,
     };
   };
 
@@ -296,10 +314,15 @@ export async function generateLessonContent(
   fileText: string,
   kind: ContentKind = "lab"
 ): Promise<LessonPayload> {
-  return runLessonGeneration(buildImportPrompt(kind, lesson, fileText), kind, {
+  const payload = await runLessonGeneration(buildImportPrompt(kind, lesson, fileText), kind, {
     grade: lesson.grade,
-    subject: "chemistry",
+    subject: lesson.subject,
   });
+  const fallbackSim = DEFAULT_SIMS[lesson.id];
+  if (lesson.subject !== "chemistry" && fallbackSim && !payload.sim) {
+    return { ...payload, pairs: [], sim: fallbackSim };
+  }
+  return payload;
 }
 
 /**
@@ -323,7 +346,11 @@ export async function generateSiblingKindContent(
   targetKind: ContentKind
 ): Promise<LessonPayload> {
   return runLessonGeneration(
-    buildSiblingKindPrompt(targetKind, JSON.stringify(source)),
+    buildSiblingKindPrompt(
+      targetKind,
+      JSON.stringify(source),
+      source.subject ?? "chemistry"
+    ),
     targetKind,
     {
       grade: source.grade,
@@ -339,14 +366,26 @@ export function deriveSiblingWithoutLlm(
   source: LessonPayload,
   targetKind: ContentKind
 ): LessonPayload | null {
-  if (targetKind === "lab" && source.pairs.length >= 1) {
+  const subject = source.subject ?? "chemistry";
+  if (targetKind === "lab" && subject === "chemistry" && source.pairs.length >= 1) {
     return {
       kind: "lab",
       title: source.title,
       note: source.note,
       pairs: source.pairs,
       grade: source.grade,
-      subject: source.subject ?? "chemistry",
+      subject,
+    };
+  }
+  if (targetKind === "lab" && subject !== "chemistry" && source.sim) {
+    return {
+      kind: "lab",
+      title: source.title,
+      note: source.note,
+      pairs: [],
+      sim: source.sim,
+      grade: source.grade,
+      subject,
     };
   }
   if (targetKind === "theory" && source.theory) {
@@ -355,9 +394,10 @@ export function deriveSiblingWithoutLlm(
       title: source.title,
       note: source.note,
       pairs: source.pairs,
+      sim: source.sim,
       theory: source.theory,
       grade: source.grade,
-      subject: source.subject ?? "chemistry",
+      subject,
     };
   }
   if (targetKind === "flashcards" && source.cards && source.cards.length > 0) {
@@ -366,9 +406,10 @@ export function deriveSiblingWithoutLlm(
       title: source.title,
       note: source.note,
       pairs: source.pairs,
+      sim: source.sim,
       cards: source.cards,
       grade: source.grade,
-      subject: source.subject ?? "chemistry",
+      subject,
     };
   }
   return null;

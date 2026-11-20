@@ -18,7 +18,7 @@ export function Sparkle({
   return (
     <svg
       aria-hidden
-      className={`chemlab-twinkle pointer-events-none ${className}`}
+      className={`scilab-twinkle pointer-events-none ${className}`}
       width={size}
       height={size}
       viewBox="0 0 24 24"

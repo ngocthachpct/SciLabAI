@@ -18,9 +18,9 @@ const bevietnam = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "ChemLab AI – Phòng Thí Nghiệm Hóa Học Ảo",
+  title: "SciLab AI – Phòng Thí Nghiệm Khoa Học Ảo",
   description:
-    "Mô phỏng thí nghiệm hóa học 2D cho học sinh THCS: trộn hóa chất, xem hiện tượng, đọc phân tích và lưu Sổ tay thí nghiệm.",
+    "Phòng thí nghiệm khoa học ảo (Hóa, Lý, Toán) cho học sinh lớp 8, 9: thí nghiệm tương tác, học lý thuyết, ôn flashcard và phân tích bằng AI.",
 };
 
 const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);

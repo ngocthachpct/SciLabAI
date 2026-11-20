@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveReaction } from "@/lib/engine";
+import {
+  getClientIp,
+  getOptionalUserId,
+  isWarmCacheRequest,
+} from "@/lib/requestIdentity";
 
 export const runtime = "nodejs";
 
@@ -29,12 +34,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    null;
+  const ip = getClientIp(req);
+  const userId = await getOptionalUserId();
+  const bypassQuota = isWarmCacheRequest(req);
 
-  const outcome = await resolveReaction(parsedBody.data.a, parsedBody.data.b, ip);
+  const outcome = await resolveReaction(parsedBody.data.a, parsedBody.data.b, ip, {
+    userId,
+    bypassQuota,
+  });
 
   if (outcome.ok) {
     return NextResponse.json({
@@ -42,6 +49,13 @@ export async function POST(req: NextRequest) {
       key: outcome.key,
       result: outcome.result,
     });
+  }
+
+  if (outcome.error === "pro_required") {
+    return NextResponse.json(
+      { error: outcome.error, message: outcome.message, upgradeUrl: "/pro" },
+      { status: 402 }
+    );
   }
 
   // Soft errors (HTTP 200) per spec section 7

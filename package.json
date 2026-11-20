@@ -1,5 +1,5 @@
 {
-  "name": "chemlab-ai",
+  "name": "scilab-ai",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:init": "node scripts/run-schema.mjs",
+    "db:seed": "node scripts/seed-demo.mjs",
     "warm-cache": "node scripts/warm-cache.mjs"
   },
   "dependencies": {

@@ -8,9 +8,13 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
+
+loadEnv();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const baseUrl = process.argv[2] ?? "http://localhost:3000";
+const warmToken = process.env.WARM_CACHE_TOKEN ?? "";
 
 const reactions = JSON.parse(
   readFileSync(join(__dirname, "..", "lib", "reactions.json"), "utf8")
@@ -40,7 +44,10 @@ for (const [a, b] of jobs) {
   try {
     const res = await fetch(`${baseUrl}/api/react`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(warmToken ? { "x-warm-cache-token": warmToken } : {}),
+      },
       body: JSON.stringify({ a, b }),
     });
     const data = await res.json();

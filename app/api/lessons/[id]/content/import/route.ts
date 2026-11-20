@@ -7,6 +7,16 @@ import {
   type ContentKind,
   type LessonPayload,
 } from "@/lib/content";
+import {
+  getClientIp,
+  getOptionalUserId,
+} from "@/lib/requestIdentity";
+import {
+  canGenerate,
+  recordGeneration,
+  GUEST_PRO_REQUIRED_MESSAGE,
+  PRO_REQUIRED_MESSAGE,
+} from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -79,6 +89,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
+  const ip = getClientIp(req);
+  const userId = await getOptionalUserId();
+  const quota = await canGenerate(userId, ip);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: "pro_required",
+        message: quota.status.isAuthenticated
+          ? PRO_REQUIRED_MESSAGE
+          : GUEST_PRO_REQUIRED_MESSAGE,
+        upgradeUrl: "/pro",
+        plan: quota.status,
+      },
+      { status: 402 }
+    );
+  }
+
   let payload: LessonPayload;
   try {
     payload = await generateLessonContent(lesson, text, kind);
@@ -91,6 +118,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           : "AI không đọc hiểu được tài liệu này. Em thử file bài giảng rõ hơn nhé!";
     return NextResponse.json({ error: "fallback", message: msg }, { status: 200 });
   }
+
+  await recordGeneration(userId, ip, "lesson_import");
 
   const db = getDb();
   if (!db) {

@@ -1,0 +1,74 @@
+{
+  "vl8-1": {
+    "type": "force-motion",
+    "params": { "F": 6, "m": 2, "friction": 0 },
+    "tasks": [
+      { "id": "a3", "prompt": "Đặt F = 6 N, m = 2 kg để xem gia tốc", "target": { "F": 6, "m": 2, "friction": 0 } },
+      { "id": "balance", "prompt": "Đặt F = 0 để vật đứng yên cân bằng", "target": { "F": 0, "m": 2, "friction": 0 } },
+      { "id": "friction", "prompt": "Bật ma sát với F = 4 N, m = 2 kg", "target": { "F": 4, "m": 2, "friction": 1 } }
+    ]
+  },
+  "vl8-2": {
+    "type": "buoyancy",
+    "params": { "V": 200, "liquid": 0, "m": 0.2 },
+    "tasks": [
+      { "id": "float", "prompt": "V = 300 cm³, m = 0,2 kg: vật nổi", "target": { "V": 300, "liquid": 0, "m": 0.2 } },
+      { "id": "sink", "prompt": "V = 100 cm³, m = 0,3 kg: vật chìm", "target": { "V": 100, "liquid": 0, "m": 0.3 } },
+      { "id": "oil", "prompt": "Đổi sang dầu với V = 200 cm³, m = 0,15 kg", "target": { "V": 200, "liquid": 1, "m": 0.15 } }
+    ]
+  },
+  "vl9-1": {
+    "type": "ohm-law",
+    "params": { "U": 6, "R": 3, "closed": 1 },
+    "tasks": [
+      { "id": "i2", "prompt": "U = 6 V, R = 3 Ω → I = 2 A", "target": { "U": 6, "R": 3, "closed": 1 } },
+      { "id": "i1", "prompt": "U = 4 V, R = 4 Ω → I = 1 A", "target": { "U": 4, "R": 4, "closed": 1 } },
+      { "id": "open", "prompt": "Ngắt mạch để xem dòng điện bằng 0", "target": { "U": 6, "R": 3, "closed": 0 } }
+    ]
+  },
+  "vl9-2": {
+    "type": "convex-lens",
+    "params": { "f": 10, "u": 30 },
+    "tasks": [
+      { "id": "real", "prompt": "f = 10 cm, u = 30 cm: ảnh thật nhỏ hơn", "target": { "f": 10, "u": 30 } },
+      { "id": "equal", "prompt": "Đặt vật tại 2F (u = 20 cm)", "target": { "f": 10, "u": 20 } },
+      { "id": "virtual", "prompt": "Đặt vật trong F (u = 6 cm): ảnh ảo", "target": { "f": 10, "u": 6 } }
+    ]
+  },
+  "toan8-1": {
+    "type": "identities",
+    "params": { "id": 0, "a": 3, "b": 2 },
+    "tasks": [
+      { "id": "sum2", "prompt": "Bình phương tổng với a = 3, b = 2", "target": { "id": 0, "a": 3, "b": 2 } },
+      { "id": "diff2", "prompt": "Bình phương hiệu với a = 5, b = 2", "target": { "id": 1, "a": 5, "b": 2 } },
+      { "id": "diffsq", "prompt": "Hiệu hai bình phương với a = 7, b = 3", "target": { "id": 2, "a": 7, "b": 3 } }
+    ]
+  },
+  "toan8-2": {
+    "type": "linear-equation",
+    "params": { "a": 3, "b": -6, "c": 0 },
+    "tasks": [
+      { "id": "x2", "prompt": "Giải 3x − 6 = 0", "target": { "a": 3, "b": -6, "c": 0 } },
+      { "id": "x4", "prompt": "Giải 2x + 3 = 11", "target": { "a": 2, "b": 3, "c": 11 } },
+      { "id": "xneg", "prompt": "Giải 2x + 5 = 1", "target": { "a": 2, "b": 5, "c": 1 } }
+    ]
+  },
+  "toan9-1": {
+    "type": "linear-function",
+    "params": { "a": 2, "b": -1 },
+    "tasks": [
+      { "id": "increase", "prompt": "Vẽ y = 2x − 1 (đồng biến)", "target": { "a": 2, "b": -1 } },
+      { "id": "decrease", "prompt": "Vẽ y = −2x + 3 (nghịch biến)", "target": { "a": -2, "b": 3 } },
+      { "id": "origin", "prompt": "Vẽ y = x đi qua gốc tọa độ", "target": { "a": 1, "b": 0 } }
+    ]
+  },
+  "toan9-2": {
+    "type": "right-triangle",
+    "params": { "a": 3, "b": 4 },
+    "tasks": [
+      { "id": "pythagoras", "prompt": "Hai cạnh 3 và 4 → cạnh huyền 5", "target": { "a": 3, "b": 4 } },
+      { "id": "five12", "prompt": "Hai cạnh 5 và 12 → cạnh huyền 13", "target": { "a": 5, "b": 12 } },
+      { "id": "isosceles", "prompt": "Hai cạnh góc vuông bằng nhau (6 và 6)", "target": { "a": 6, "b": 6 } }
+    ]
+  }
+}

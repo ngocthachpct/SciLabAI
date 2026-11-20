@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { SimExperimentSchema, SIM_TYPE_SUBJECT } from "@/lib/sim";
+import type { SimExperiment } from "@/lib/sim";
 
 /** Study / import mode — maps to lesson_content.kind and payload.kind */
 export const ContentKindSchema = z.enum(["lab", "theory", "flashcards"]);
@@ -7,7 +9,7 @@ export type ContentKind = z.infer<typeof ContentKindSchema>;
 export const GradeSchema = z.enum(["8", "9"]);
 export type ContentGrade = z.infer<typeof GradeSchema>;
 
-export const SubjectSchema = z.enum(["chemistry"]);
+export const SubjectSchema = z.enum(["chemistry", "physics", "math"]);
 export type ContentSubject = z.infer<typeof SubjectSchema>;
 
 export const TheoryBlockSchema = z.object({
@@ -32,7 +34,16 @@ export const StoredFlashCardSchema = z.object({
   front: z.string().min(1).max(280),
   back: z.string().min(1).max(500),
   tag: z
-    .enum(["Lý thuyết", "Thí nghiệm", "Không phản ứng", "An toàn", "Quiz"])
+    .enum([
+      "Lý thuyết",
+      "Thí nghiệm",
+      "Không phản ứng",
+      "An toàn",
+      "Quiz",
+      "Công thức",
+      "Bài tập",
+      "Ví dụ",
+    ])
     .optional(),
 });
 
@@ -54,16 +65,41 @@ const LessonPayloadObjectSchema = z
     title: z.string().min(1).max(120),
     note: z.string().max(600),
     pairs: z.array(PairSchema).max(12).default([]),
+    sim: SimExperimentSchema.optional(),
     theory: TheoryBlockSchema.optional(),
     cards: z.array(StoredFlashCardSchema).max(20).optional(),
     grade: GradeSchema.optional(),
     subject: SubjectSchema.optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.kind === "lab" && data.pairs.length < 1) {
+    if (data.kind === "lab") {
+      if (data.subject && data.subject !== "chemistry") {
+        if (!data.sim) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Lab content for physics/math needs a simulation config",
+            path: ["sim"],
+          });
+        }
+      } else if (data.pairs.length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Lab content needs at least 1 reagent pair",
+          path: ["pairs"],
+        });
+      }
+    }
+    if (data.sim && data.subject && SIM_TYPE_SUBJECT[data.sim.type] !== data.subject) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Lab content needs at least 1 reagent pair",
+        message: "Simulation type does not match the subject",
+        path: ["sim", "type"],
+      });
+    }
+    if (data.subject && data.subject !== "chemistry" && data.pairs.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Physics/math content must not use reagent pairs",
         path: ["pairs"],
       });
     }
@@ -96,7 +132,7 @@ export type LessonPayload = z.infer<typeof LessonPayloadObjectSchema>;
 export interface LessonContentMeta {
   id: number;
   lesson_id: string | number | null;
-  source: "static" | "ai";
+  source: "static" | "ai" | "demo";
   kind: ContentKind;
   file_name: string | null;
   title: string;
@@ -125,4 +161,12 @@ export interface CustomImportContext {
   grade: ContentGrade;
   subject: ContentSubject;
   kind: ContentKind;
+}
+
+export function resolveLabMode(payload: LessonPayload): "reaction" | "simulation" {
+  return payload.kind === "lab" && payload.sim ? "simulation" : "reaction";
+}
+
+export function getSim(payload: LessonPayload): SimExperiment | null {
+  return payload.sim ?? null;
 }

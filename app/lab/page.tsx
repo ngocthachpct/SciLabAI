@@ -15,12 +15,16 @@ import { getReagent } from "@/lib/reagents";
 import { pairKey } from "@/lib/pairKey";
 import type { ReactionResult, ReactResponse } from "@/lib/schema";
 import { useNotebook } from "@/hooks/useNotebook";
-import { getLesson, isStaticContent } from "@/lib/lessons";
-import type { LessonPayload } from "@/lib/content";
+import { usePlan } from "@/hooks/usePlan";
+import { getLabConfig, getLesson, isStaticContent } from "@/lib/lessons";
+import { resolveLabMode, type LessonPayload } from "@/lib/content";
+import type { SimExperiment } from "@/lib/sim";
+import { SimulationLab } from "@/components/lab/SimulationLab";
 import { ModeSwitchNav } from "@/components/study/ModeSwitchNav";
 import { WaveLoading } from "@/components/ui/WaveLoading";
 
-const SOUND_KEY = "chemlab.sound";
+const SOUND_KEY = "scilab.sound";
+const LEGACY_SOUND_KEY = "chemlab.sound";
 
 export default function LabPage() {
   return (
@@ -40,6 +44,7 @@ function LabClient() {
   const searchParams = useSearchParams();
   const lessonId = searchParams.get("lesson");
   const contentId = searchParams.get("content");
+  const demo = searchParams.get("demo") === "1";
   const lesson = getLesson(lessonId);
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -58,17 +63,23 @@ function LabClient() {
   const runCounter = useRef(1);
 
   const notebook = useNotebook();
+  const plan = usePlan();
 
   /* ---------- Load lesson content (SGK static / catalog DB / my-contents) ---------- */
   useEffect(() => {
     const cancelled = { v: false };
 
     if (isStaticContent(contentId) && lesson) {
+      const config = getLabConfig(lesson);
       setContent({
         kind: "lab",
         title: lesson.title,
         note: lesson.description,
-        pairs: lesson.defaultPairs.map(([a, b]) => ({ a, b })),
+        pairs:
+          config.mode === "reaction"
+            ? lesson.defaultPairs.map(([a, b]) => ({ a, b }))
+            : [],
+        sim: config.sim,
       });
       setContentError(null);
       setContentLoading(false);
@@ -120,7 +131,19 @@ function LabClient() {
 
   useEffect(() => {
     try {
-      setSoundOn(window.localStorage.getItem(SOUND_KEY) !== "0");
+      const current = window.localStorage.getItem(SOUND_KEY);
+      if (current !== null) {
+        setSoundOn(current !== "0");
+        return;
+      }
+      const legacy = window.localStorage.getItem(LEGACY_SOUND_KEY);
+      if (legacy !== null) {
+        window.localStorage.setItem(SOUND_KEY, legacy);
+        window.localStorage.removeItem(LEGACY_SOUND_KEY);
+        setSoundOn(legacy !== "0");
+        return;
+      }
+      setSoundOn(true);
     } catch {
       setSoundOn(true);
     }
@@ -200,10 +223,12 @@ function LabClient() {
       result: out.result,
       source: out.source,
       message: out.message,
+      upgradeUrl: out.upgradeUrl,
       isNew: out.isNew,
     });
     setPanelLoading(false);
     setBusy(false);
+    if (out.source === "ai") void plan.refresh();
     if (out.result && out.result.has_reaction) {
       const key = pairKey(out.a.id, out.b.id);
       setDoneKeys((prev) => new Set(prev).add(key));
@@ -226,6 +251,13 @@ function LabClient() {
     setBusy(false);
     setSelected([a, b]);
   };
+
+  const handleTaskComplete = useCallback(
+    (key: string, label: string): void => {
+      void notebook.recordTask(key, label);
+    },
+    [notebook]
+  );
 
   const nicknameInfo = notebook.hasName
     ? notebook.nickname
@@ -250,6 +282,12 @@ function LabClient() {
   }
 
   const displayTitle = content?.title ?? lesson?.title ?? "Bài của tôi";
+  const labConfig = lesson ? getLabConfig(lesson) : null;
+  const sim: SimExperiment | null = content?.sim ?? labConfig?.sim ?? null;
+  const isSimulation = Boolean(
+    sim && (!content || resolveLabMode(content) === "simulation")
+  );
+  const entryId = lesson?.id ?? contentId ?? "custom";
 
   const tasks = (content?.pairs ?? [])
     .map(({ a, b }) => {
@@ -290,6 +328,8 @@ function LabClient() {
           current="lab"
           contentId={contentId}
           lessonId={lesson?.id ?? null}
+          subject={content?.subject ?? lesson?.subject ?? null}
+          demo={demo}
         />
         <div className="sticker-chip bg-mustard px-3.5 py-1.5">
           <span className="font-display max-w-[200px] truncate text-sm font-extrabold sm:max-w-none">
@@ -306,6 +346,23 @@ function LabClient() {
             <span aria-hidden>👤</span>
             <span className="max-w-[160px] truncate">{nicknameInfo}</span>
           </button>
+          <Link
+            href="/pro"
+            className={`sticker-chip px-3 py-1.5 text-xs ${
+              plan.info.isPro
+                ? "bg-mustard text-ink"
+                : plan.info.remaining > 0
+                  ? "bg-teal-soft text-ink"
+                  : "bg-paper-deep text-[#b3402a]"
+            }`}
+            title="SciLab Pro"
+          >
+            {plan.info.isPro
+              ? "★ Pro"
+              : plan.info.remaining > 0
+                ? `AI: ${plan.info.remaining} lượt`
+                : "Hết lượt AI · Nâng Pro"}
+          </Link>
           <BadgeChip badgeLabel={notebook.badgeLabel} count={notebook.count} />
           <button
             type="button"
@@ -342,48 +399,60 @@ function LabClient() {
         </div>
       )}
 
-      {/* Lesson tasks */}
-      {!contentLoading && tasks.length > 0 && (
-        <LessonTaskCard
-          lessonTitle={displayTitle}
-          note={content?.note}
-          tasks={tasks}
-          doneKeys={doneKeys}
-          onSelect={handleHintClick}
+      {isSimulation && sim ? (
+        <SimulationLab
+          sim={sim}
+          entryId={entryId}
+          title={displayTitle}
+          note={content?.note ?? lesson?.description}
+          onCompleteTask={handleTaskComplete}
         />
-      )}
-
-      {/* ================= Main: 1 col @mobile, 2 cols @md, 3 cols @lg ================= */}
-      <div className="grid flex-1 grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-[260px_1fr_340px]">
-        <div className="order-2 min-h-[560px] lg:order-1 lg:min-h-0">
-          <ReagentShelf
-            selected={selected}
-            onSelect={handleSelect}
-            onRemoveSlot={handleRemoveSlot}
-            onSubmit={handleSubmit}
-            busy={busy}
-            canSubmit={selected.length === 2}
-          />
-        </div>
-
-        <div className="order-1 min-h-[440px] lg:min-h-0">
-          <div className="h-full">
-            <LabBench
-              run={run}
-              requestResult={requestResult}
-              onResult={handleResult}
-              onReset={handleReset}
-              hintEnabled={!content && notebook.count === 0}
-              onHintClick={handleHintClick}
-              soundOn={soundOn}
+      ) : (
+        <>
+          {/* Lesson tasks */}
+          {!contentLoading && tasks.length > 0 && (
+            <LessonTaskCard
+              lessonTitle={displayTitle}
+              note={content?.note}
+              tasks={tasks}
+              doneKeys={doneKeys}
+              onSelect={handleHintClick}
             />
-          </div>
-        </div>
+          )}
 
-        <div className="order-3 min-h-[360px] md:col-span-2 md:min-h-[440px] lg:col-span-1 lg:min-h-0">
-          <AnalysisPanel analysis={analysis} loading={panelLoading} />
-        </div>
-      </div>
+          {/* ================= Main: 1 col @mobile, 2 cols @md, 3 cols @lg ================= */}
+          <div className="grid flex-1 grid-cols-1 items-stretch gap-5 md:grid-cols-2 lg:grid-cols-[260px_1fr_340px]">
+            <div className="order-2 min-h-[560px] lg:order-1 lg:min-h-0">
+              <ReagentShelf
+                selected={selected}
+                onSelect={handleSelect}
+                onRemoveSlot={handleRemoveSlot}
+                onSubmit={handleSubmit}
+                busy={busy}
+                canSubmit={selected.length === 2}
+              />
+            </div>
+
+            <div className="order-1 min-h-[440px] lg:min-h-0">
+              <div className="h-full">
+                <LabBench
+                  run={run}
+                  requestResult={requestResult}
+                  onResult={handleResult}
+                  onReset={handleReset}
+                  hintEnabled={!content && notebook.count === 0}
+                  onHintClick={handleHintClick}
+                  soundOn={soundOn}
+                />
+              </div>
+            </div>
+
+            <div className="order-3 min-h-[360px] md:col-span-2 md:min-h-[440px] lg:col-span-1 lg:min-h-0">
+              <AnalysisPanel analysis={analysis} loading={panelLoading} />
+            </div>
+          </div>
+        </>
+      )}
 
       <ToastStack items={notebook.toasts} onClose={notebook.dismissToast} />
 

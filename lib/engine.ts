@@ -9,10 +9,22 @@ import {
 } from "./schema";
 import { askGeminiWithRetry } from "./gemini";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "./rateLimit";
+import {
+  canGenerate,
+  recordGeneration,
+  PRO_REQUIRED_MESSAGE,
+  GUEST_PRO_REQUIRED_MESSAGE,
+} from "./plan";
 
 export type ResolveOutcome =
   | { ok: true; source: "local" | "cache" | "ai"; key: string; result: ReactionResult }
-  | { ok: false; error: "fallback"; message: string };
+  | { ok: false; error: "fallback" | "pro_required"; message: string };
+
+export interface ResolveOptions {
+  userId?: string | null;
+  /** Used by scripts/warm-cache so prewarming never burns demo quota. */
+  bypassQuota?: boolean;
+}
 
 const LOCAL_REACTIONS: Readonly<Record<string, unknown>> = localReactions;
 
@@ -73,7 +85,8 @@ async function storeCache(
 export async function resolveReaction(
   idA: unknown,
   idB: unknown,
-  ip: string | null
+  ip: string | null,
+  options: ResolveOptions = {}
 ): Promise<ResolveOutcome> {
   if (!isValidReagent(idA) || !isValidReagent(idB)) {
     return { ok: false, error: "fallback", message: "Chất không hợp lệ." };
@@ -96,8 +109,20 @@ export async function resolveReaction(
   const cached = await tryCache(key);
   if (cached) return { ok: true, source: "cache", key, result: cached };
 
-  // Tầng 3: rate limit -> Gemini -> validate -> cache
+  // Tầng 3: quota -> rate limit -> Gemini -> validate -> cache
   try {
+    if (!options.bypassQuota) {
+      const quota = await canGenerate(options.userId ?? null, ip);
+      if (!quota.allowed) {
+        return {
+          ok: false,
+          error: "pro_required",
+          message: quota.status.isAuthenticated
+            ? PRO_REQUIRED_MESSAGE
+            : GUEST_PRO_REQUIRED_MESSAGE,
+        };
+      }
+    }
     if (ip && !(await checkRateLimit(ip))) {
       return { ok: false, error: "fallback", message: RATE_LIMIT_MESSAGE };
     }
@@ -105,6 +130,9 @@ export async function resolveReaction(
     const broken = validateReactionResult(result);
     if (broken) {
       return { ok: false, error: "fallback", message: "Kết quả AI không hợp lệ." };
+    }
+    if (!options.bypassQuota) {
+      await recordGeneration(options.userId ?? null, ip, "reaction");
     }
     await storeCache(key, result);
     return { ok: true, source: "ai", key, result };

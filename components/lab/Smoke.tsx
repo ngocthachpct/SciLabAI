@@ -31,7 +31,7 @@ export function Smoke({ count = 4 }: SmokeProps) {
       {wisps.map((w, i) => (
         <span
           key={i}
-          className="chemlab-loop chemlab-smoke absolute rounded-full blur-[2px]"
+          className="scilab-loop scilab-smoke absolute rounded-full blur-[2px]"
           style={
             {
               left: `${w.left}%`,
@@ -40,8 +40,8 @@ export function Smoke({ count = 4 }: SmokeProps) {
               height: `${Math.round(w.size * 0.7)}px`,
               backgroundColor: "#cbd5e1",
               opacity: 0,
-              "--chemlab-dur": `${w.duration}s`,
-              "--chemlab-delay": `${w.delay}s`,
+              "--scilab-dur": `${w.duration}s`,
+              "--scilab-delay": `${w.delay}s`,
             } as CSSProperties
           }
         />

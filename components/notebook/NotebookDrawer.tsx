@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { isSimKey } from "@/lib/sim";
 
 interface NotebookEntry {
   pair_key: string;
@@ -86,7 +87,7 @@ export const NotebookDrawer = function NotebookDrawerImpl({
                 📖 Sổ tay thí nghiệm
               </h2>
               <span className="sticker-chip bg-teal-soft px-2.5 py-0.5 text-xs text-ink">
-                {count} phản ứng
+                {count} mục đã lưu
               </span>
               <span className="sticker-chip bg-mustard px-2.5 py-0.5 text-xs text-ink rot-neg">
                 🏅 {badgeLabel}
@@ -104,7 +105,7 @@ export const NotebookDrawer = function NotebookDrawerImpl({
             {!hasName && (
               <div className="sticker-flat mb-3 flex items-center gap-2 bg-teal-soft px-3 py-2 text-sm text-ink">
                 <span className="flex-1 font-semibold">
-                  Nhập biệt danh để lưu phản ứng của em nhé!
+                  Nhập biệt danh để lưu kết quả thí nghiệm của em nhé!
                 </span>
                 <button
                   type="button"
@@ -118,7 +119,7 @@ export const NotebookDrawer = function NotebookDrawerImpl({
 
             {reactions.length === 0 ? (
               <div className="dashed-frame flex-1 overflow-y-auto p-6 text-center text-sm font-medium text-ink-soft">
-                Chưa có phản ứng nào. Hãy thực hiện thí nghiệm để ghi vào đây!
+                Chưa có mục nào. Hãy hoàn thành thí nghiệm để ghi vào đây!
               </div>
             ) : (
               <ul className="flex-1 overflow-y-auto pt-1">
@@ -129,7 +130,12 @@ export const NotebookDrawer = function NotebookDrawerImpl({
                       i % 2 === 0 ? "rot-neg" : "rot-pos"
                     }`}
                   >
-                    <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-soft">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-ink-soft">
+                      {isSimKey(r.pair_key) && (
+                        <span className="sticker-chip bg-lilac px-2 py-0.5 text-[10px] text-ink">
+                          Mô phỏng
+                        </span>
+                      )}
                       {r.pair_key}
                     </div>
                     <div className="text-sm font-semibold text-ink">{r.equation}</div>
@@ -142,7 +148,7 @@ export const NotebookDrawer = function NotebookDrawerImpl({
             )}
 
             <p className="mt-2 text-center text-[11px] font-semibold text-ink-soft">
-              Danh hiệu: ≥5 → Nhà nghiên cứu, ≥10 → Bậc thầy Hóa học
+              Danh hiệu: ≥5 → Nhà nghiên cứu, ≥10 → Bậc thầy thí nghiệm
             </p>
           </motion.div>
         </>

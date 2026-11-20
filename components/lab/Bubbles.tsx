@@ -29,7 +29,7 @@ export function Bubbles({ color = "#ffffff", count = 9 }: BubblesProps) {
       {grains.map((g, i) => (
         <span
           key={i}
-          className="chemlab-loop chemlab-bubble absolute rounded-full"
+          className="scilab-loop scilab-bubble absolute rounded-full"
           style={
             {
               left: `${g.left}%`,
@@ -38,8 +38,8 @@ export function Bubbles({ color = "#ffffff", count = 9 }: BubblesProps) {
               height: `${g.size}px`,
               backgroundColor: color,
               opacity: 0,
-              "--chemlab-dur": `${g.duration}s`,
-              "--chemlab-delay": `${g.delay}s`,
+              "--scilab-dur": `${g.duration}s`,
+              "--scilab-delay": `${g.delay}s`,
             } as CSSProperties
           }
         />

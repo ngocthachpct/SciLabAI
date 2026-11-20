@@ -4,7 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignInButton } from "@clerk/nextjs";
-import { GRADES, LESSONS, type Grade } from "@/lib/lessons";
+import {
+  GRADES,
+  LESSONS,
+  SUBJECTS,
+  SUBJECT_LABEL_VI,
+  canUseLab,
+  type Grade,
+  type Subject,
+} from "@/lib/lessons";
 import {
   CONTENT_KIND_LABEL_VI,
   studyModeToKind,
@@ -18,10 +26,10 @@ import { ClerkChrome, ClerkMineGate } from "@/components/auth/ClerkChrome";
 import { PrefillNickname } from "@/components/auth/PrefillNickname";
 import { WaveLoading } from "@/components/ui/WaveLoading";
 import { hasClerk } from "@/hooks/useClerkOptional";
+import { usePlan } from "@/hooks/usePlan";
 
-type Subject = "chemistry";
 type StudyMode = "theory" | "review" | "lab";
-type Source = "sgk" | "mine";
+type Source = "sgk" | "demo" | "mine";
 
 function StepHeader({ n, label, active }: { n: number; label: string; active: boolean }) {
   return (
@@ -61,7 +69,7 @@ const MODE_OPTIONS = [
     id: "lab" as const,
     icon: "🧪",
     title: "Phòng Thí Nghiệm",
-    subtitle: "Thực hành thí nghiệm",
+    subtitle: "Thí nghiệm / mô phỏng tương tác",
     tone: "bg-coral",
   },
 ] as const;
@@ -69,6 +77,7 @@ const MODE_OPTIONS = [
 export default function StudyPage() {
   const router = useRouter();
   const notebook = useNotebook();
+  const plan = usePlan();
   const [nicknameOpen, setNicknameOpen] = useState(false);
 
   const [grade, setGrade] = useState<Grade | null>(null);
@@ -76,8 +85,12 @@ export default function StudyPage() {
   const [mode, setMode] = useState<StudyMode | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [sgkLessonId, setSgkLessonId] = useState<string | null>(null);
+  const [demoId, setDemoId] = useState<string | null>(null);
   const [mineId, setMineId] = useState<string | null>(null);
 
+  const [demoList, setDemoList] = useState<LessonContentMeta[]>([]);
+  const [loadingDemo, setLoadingDemo] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
   const [mineList, setMineList] = useState<LessonContentMeta[]>([]);
   const [loadingMine, setLoadingMine] = useState(false);
   const [mineError, setMineError] = useState<string | null>(null);
@@ -89,18 +102,50 @@ export default function StudyPage() {
 
   const contentKind: ContentKind | null = mode ? studyModeToKind(mode) : null;
 
-  const lessonsForGrade = grade
-    ? LESSONS.filter((l) => l.grade === grade).sort((a, b) => a.order - b.order)
-    : [];
+  const lessonsForGrade =
+    grade && subject
+      ? LESSONS.filter((l) => l.grade === grade && l.subject === subject).sort(
+          (a, b) => a.order - b.order
+        )
+      : [];
+
+  const loadDemo = useCallback(async () => {
+    if (!grade || !subject || !contentKind) return;
+    setLoadingDemo(true);
+    setDemoError(null);
+    try {
+      const qs = new URLSearchParams({
+        grade,
+        subject,
+        kind: contentKind,
+      });
+      const res = await fetch(`/api/demo-contents?${qs}`, { cache: "no-store" });
+      const data = (await res.json()) as {
+        contents?: LessonContentMeta[];
+        message?: string;
+      };
+      if (res.ok && Array.isArray(data.contents)) {
+        setDemoList(data.contents);
+      } else {
+        setDemoError(data.message ?? "Chưa tải được bài mẫu.");
+        setDemoList([]);
+      }
+    } catch {
+      setDemoError("Lỗi mạng khi tải bài mẫu.");
+      setDemoList([]);
+    } finally {
+      setLoadingDemo(false);
+    }
+  }, [grade, subject, contentKind]);
 
   const loadMine = useCallback(async () => {
-    if (!grade || !contentKind || !hasClerk) return;
+    if (!grade || !subject || !contentKind || !hasClerk) return;
     setLoadingMine(true);
     setMineError(null);
     try {
       const qs = new URLSearchParams({
         grade,
-        subject: "chemistry",
+        subject,
         kind: contentKind,
       });
       const res = await fetch(`/api/my-contents?${qs}`, { cache: "no-store" });
@@ -123,7 +168,11 @@ export default function StudyPage() {
     } finally {
       setLoadingMine(false);
     }
-  }, [grade, contentKind]);
+  }, [grade, subject, contentKind]);
+
+  useEffect(() => {
+    if (source === "demo") void loadDemo();
+  }, [source, loadDemo]);
 
   useEffect(() => {
     if (source === "mine" && hasClerk) void loadMine();
@@ -141,13 +190,17 @@ export default function StudyPage() {
       setSource(null);
     }
     setSgkLessonId(null);
+    setDemoId(null);
     setMineId(null);
+    setDemoList([]);
     setMineList([]);
+    setDemoError(null);
+    setMineError(null);
     setImportMsg(null);
   };
 
   const uploadMine = async (file: File): Promise<void> => {
-    if (!grade || !contentKind) return;
+    if (!grade || !subject || !contentKind) return;
     setImporting(true);
     setImportMsg(null);
     try {
@@ -155,7 +208,7 @@ export default function StudyPage() {
       form.append("file", file);
       form.append("kind", contentKind);
       form.append("grade", grade);
-      form.append("subject", "chemistry");
+      form.append("subject", subject);
       const res = await fetch("/api/my-contents/import", { method: "POST", body: form });
       const data = (await res.json()) as {
         content?: { id: number };
@@ -168,6 +221,13 @@ export default function StudyPage() {
         });
         await loadMine();
         setMineId(String(data.content.id));
+        void plan.refresh();
+      } else if (res.status === 402) {
+        setImportMsg({
+          tone: "err",
+          text: `${data.message ?? "Hết lượt AI miễn phí."} Xem gói Pro tại trang Nâng cấp.`,
+        });
+        void plan.refresh();
       } else {
         setImportMsg({
           tone: "err",
@@ -191,6 +251,16 @@ export default function StudyPage() {
       else router.push(`/lab?${qs}`);
       return;
     }
+    if (source === "demo" && demoId) {
+      const item = demoList.find((d) => String(d.id) === demoId);
+      const qs = item?.lesson_id
+        ? `lesson=${encodeURIComponent(item.lesson_id)}&content=${encodeURIComponent(demoId)}&demo=1`
+        : `content=${encodeURIComponent(demoId)}&demo=1`;
+      if (mode === "theory") router.push(`/ly-thuyet?${qs}`);
+      else if (mode === "review") router.push(`/on-tap?${qs}`);
+      else router.push(`/lab?${qs}`);
+      return;
+    }
     if (source === "mine" && mineId) {
       const qs = `content=${encodeURIComponent(mineId)}`;
       if (mode === "theory") router.push(`/ly-thuyet?${qs}`);
@@ -202,6 +272,7 @@ export default function StudyPage() {
   const canGo =
     mode !== null &&
     ((source === "sgk" && sgkLessonId !== null) ||
+      (source === "demo" && demoId !== null) ||
       (source === "mine" && mineId !== null));
 
   const step = !grade ? 1 : !subject ? 2 : !mode ? 3 : !source ? 4 : 5;
@@ -215,6 +286,20 @@ export default function StudyPage() {
         <h1 className="font-display text-xl font-extrabold text-ink">Chọn bài học</h1>
         <Sparkle tone="#e07a5f" size={18} delay="0.4s" />
         <div className="ml-auto flex flex-wrap items-center gap-2.5">
+          <Link
+            href="/pro"
+            className={`sticker-chip px-3 py-1.5 text-xs ${
+              plan.info.isPro
+                ? "bg-mustard text-ink"
+                : plan.info.remaining > 0
+                  ? "bg-teal-soft text-ink"
+                  : "bg-paper-deep text-[#b3402a]"
+            }`}
+          >
+            {plan.info.isPro
+              ? "★ Pro"
+              : `AI: ${plan.info.used}/${plan.info.freeLimit}`}
+          </Link>
           <button
             type="button"
             onClick={() => setNicknameOpen(true)}
@@ -259,25 +344,20 @@ export default function StudyPage() {
       >
         <StepHeader n={2} label="Môn học" active={Boolean(grade)} />
         <div className="mt-3 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSubject("chemistry");
-              resetFrom("subject");
-            }}
-            className={`sticker-btn px-5 py-3 text-base ${
-              subject === "chemistry" ? "bg-teal-soft text-ink rot-neg" : "bg-paper text-ink"
-            }`}
-          >
-            ⚗️ Hóa học
-          </button>
-          {["Vật lý", "Toán"].map((s) => (
-            <span
-              key={s}
-              className="sticker-chip cursor-not-allowed bg-paper-deep px-4 py-2.5 text-sm text-ink-soft opacity-60"
+          {SUBJECTS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => {
+                setSubject(s.id);
+                resetFrom("subject");
+              }}
+              className={`sticker-btn px-5 py-3 text-base ${
+                subject === s.id ? "bg-teal-soft text-ink rot-neg" : "bg-paper text-ink"
+              }`}
             >
-              {s} 🔒
-            </span>
+              {s.icon} {SUBJECT_LABEL_VI[s.id]}
+            </button>
           ))}
         </div>
       </section>
@@ -289,23 +369,29 @@ export default function StudyPage() {
       >
         <StepHeader n={3} label="Chế độ học" active={Boolean(subject)} />
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {MODE_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => {
-                setMode(opt.id);
-                resetFrom("mode");
-              }}
-              className={`sticker-flat p-4 text-left hover:-translate-y-0.5 ${
-                mode === opt.id ? `${opt.tone} rot-neg` : "bg-paper"
-              }`}
-            >
-              <span className="text-2xl">{opt.icon}</span>
-              <p className="mt-2 font-display text-base font-extrabold text-ink">{opt.title}</p>
-              <p className="mt-0.5 text-xs font-medium text-ink-soft">{opt.subtitle}</p>
-            </button>
-          ))}
+          {MODE_OPTIONS.map((opt) => {
+            const labLocked = opt.id === "lab" && subject !== null && !canUseLab(subject);
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                disabled={labLocked}
+                onClick={() => {
+                  setMode(opt.id);
+                  resetFrom("mode");
+                }}
+                className={`sticker-flat p-4 text-left hover:-translate-y-0.5 ${
+                  labLocked ? "cursor-not-allowed opacity-55" : ""
+                } ${mode === opt.id ? `${opt.tone} rot-neg` : "bg-paper"}`}
+              >
+                <span className="text-2xl">{opt.icon}</span>
+                <p className="mt-2 font-display text-base font-extrabold text-ink">{opt.title}</p>
+                <p className="mt-0.5 text-xs font-medium text-ink-soft">
+                  {labLocked ? "Sắp ra mắt cho môn này" : opt.subtitle}
+                </p>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -315,12 +401,13 @@ export default function StudyPage() {
         style={{ opacity: mode ? 1 : 0.45, pointerEvents: mode ? "auto" : "none" }}
       >
         <StepHeader n={4} label="Nguồn nội dung" active={Boolean(mode)} />
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <button
             type="button"
             onClick={() => {
               setSource("sgk");
               setSgkLessonId(null);
+              setDemoId(null);
               setMineId(null);
               setImportMsg(null);
             }}
@@ -336,8 +423,27 @@ export default function StudyPage() {
           <button
             type="button"
             onClick={() => {
+              setSource("demo");
+              setSgkLessonId(null);
+              setDemoId(null);
+              setMineId(null);
+              setImportMsg(null);
+            }}
+            className={`sticker-flat p-4 text-left hover:-translate-y-0.5 ${
+              source === "demo" ? "bg-mustard rot-neg" : "bg-paper"
+            }`}
+          >
+            <p className="font-display text-base font-extrabold text-ink">⭐ Bài mẫu</p>
+            <p className="mt-1 text-xs font-medium text-ink-soft">
+              Nội dung demo công khai, không tốn lượt AI
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setSource("mine");
               setSgkLessonId(null);
+              setDemoId(null);
               setMineId(null);
               setImportMsg(null);
             }}
@@ -360,7 +466,13 @@ export default function StudyPage() {
       >
         <StepHeader
           n={5}
-          label={source === "mine" ? "Bài của tôi" : "Bài học SGK"}
+          label={
+            source === "mine"
+              ? "Bài của tôi"
+              : source === "demo"
+                ? "Bài mẫu"
+                : "Bài học SGK"
+          }
           active={Boolean(source)}
         />
 
@@ -386,6 +498,35 @@ export default function StudyPage() {
           </div>
         )}
 
+        {source === "demo" && (
+          <div className="mt-3 flex flex-col gap-3">
+            {demoError && (
+              <p className="text-xs font-semibold text-[#b3402a]">{demoError}</p>
+            )}
+            {loadingDemo && <WaveLoading text="Loading..." />}
+            {!loadingDemo && !demoError && demoList.length === 0 && (
+              <p className="text-sm font-medium text-ink-soft">
+                Chưa có bài mẫu cho môn/nội dung này. Chạy <code>npm run db:seed</code> để tạo dữ liệu demo.
+              </p>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {demoList.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDemoId(String(d.id))}
+                  className={`sticker-flat p-3 text-left hover:-translate-y-0.5 ${
+                    demoId === String(d.id) ? "bg-mustard" : "bg-paper"
+                  }`}
+                >
+                  <p className="font-display text-sm font-extrabold text-ink">{d.title}</p>
+                  <p className="mt-1 text-xs font-medium text-ink-soft">{d.note || "Bài mẫu"}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {source === "mine" && (
           <div className="mt-3 flex flex-col gap-3">
             <ClerkMineGate
@@ -406,6 +547,15 @@ export default function StudyPage() {
               }
             >
               <>
+                {!plan.info.isPro && plan.info.remaining === 0 && (
+                  <div className="sticker-flat bg-paper-deep px-3.5 py-2.5 text-xs font-semibold text-ink">
+                    Em đã hết lượt AI miễn phí. Học bài SGK / bài mẫu hoặc{" "}
+                    <Link href="/pro" className="font-bold text-terracotta underline">
+                      nâng cấp SciLab Pro
+                    </Link>{" "}
+                    để tạo thêm bài nhé.
+                  </div>
+                )}
                 <label
                   className={`sticker-btn w-fit bg-coral px-4 py-3 text-sm text-ink ${
                     importing ? "pointer-events-none opacity-60" : ""

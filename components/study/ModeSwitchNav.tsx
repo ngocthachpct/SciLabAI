@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { isStaticContent } from "@/lib/lessons";
+import { canUseLab, isStaticContent, type Subject } from "@/lib/lessons";
 import { studyModeToKind, type ContentKind } from "@/lib/content";
 import { WaveLoading } from "@/components/ui/WaveLoading";
 
@@ -38,13 +38,23 @@ interface ModeSwitchNavProps {
   current: StudyMode;
   contentId: string | null;
   lessonId: string | null;
+  /** Used to hide the Lab entry for non-chemistry subjects. */
+  subject?: Subject | null;
+  /** Demo content: switch between public sample payloads. */
+  demo?: boolean;
 }
 
 /**
  * For SGK/static: plain links with same query.
  * For AI-owned content: resolve sibling kind (reuse DB or generate+save) then navigate.
  */
-export function ModeSwitchNav({ current, contentId, lessonId }: ModeSwitchNavProps) {
+export function ModeSwitchNav({
+  current,
+  contentId,
+  lessonId,
+  subject,
+  demo = false,
+}: ModeSwitchNavProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<StudyMode | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -60,6 +70,35 @@ export function ModeSwitchNav({ current, contentId, lessonId }: ModeSwitchNavPro
       : lessonId
         ? `lesson=${lessonId}&content=${encodeURIComponent(`static:${lessonId}`)}`
         : "";
+
+  const goDemo = async (mode: StudyMode): Promise<void> => {
+    if (!lessonId) return;
+    setBusy(mode);
+    setErr(null);
+    try {
+      const kind = studyModeToKind(mode);
+      const res = await fetch(
+        `/api/lessons/${encodeURIComponent(lessonId)}/content?kind=${kind}&source=demo`,
+        { cache: "no-store" }
+      );
+      const data = (await res.json()) as {
+        contents?: { id: number }[];
+        message?: string;
+      };
+      const sample = data.contents?.[0];
+      if (res.ok && sample?.id) {
+        router.push(
+          `${MODE_META[mode].href}?lesson=${encodeURIComponent(lessonId)}&content=${sample.id}&demo=1`
+        );
+        return;
+      }
+      setErr(data.message ?? "Chưa tìm thấy bài mẫu cho chế độ này.");
+    } catch {
+      setErr("Lỗi mạng khi chuyển bài mẫu.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const goMine = async (mode: StudyMode): Promise<void> => {
     if (!contentId || !isMine) return;
@@ -89,7 +128,10 @@ export function ModeSwitchNav({ current, contentId, lessonId }: ModeSwitchNavPro
     }
   };
 
-  const modes = (Object.keys(MODE_META) as StudyMode[]).filter((m) => m !== current);
+  const labAvailable = subject ? canUseLab(subject) : true;
+  const modes = (Object.keys(MODE_META) as StudyMode[]).filter(
+    (m) => m !== current && (m !== "lab" || labAvailable)
+  );
 
   return (
     <>
@@ -108,7 +150,7 @@ export function ModeSwitchNav({ current, contentId, lessonId }: ModeSwitchNavPro
             key={mode}
             type="button"
             disabled={busy !== null}
-            onClick={() => void goMine(mode)}
+            onClick={() => void (demo ? goDemo(mode) : goMine(mode))}
             className={`${meta.className} ${busy === mode ? "opacity-60" : ""}`}
           >
             {busy === mode ? "…" : meta.label}

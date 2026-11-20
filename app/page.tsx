@@ -18,13 +18,13 @@ const STEPS = [
   },
   {
     icon: "2️⃣",
-    title: "Chọn khối lớp & bài học",
-    text: "Lớp 8 hoặc Lớp 9, môn Hóa học, rồi chọn bài học cần thực hành.",
+    title: "Chọn khối lớp & môn học",
+    text: "Lớp 8 hoặc Lớp 9, chọn môn Hóa học, Vật lý hoặc Toán, rồi chọn bài cần học.",
   },
   {
     icon: "3️⃣",
-    title: "Vào lab",
-    text: "Trộn 2 hóa chất, xem hiện tượng: đổi màu, sủi bọt, kết tủa, tỏa nhiệt!",
+    title: "Vào phòng học",
+    text: "Hóa học: trộn hóa chất trong Lab. Vật lý & Toán: học lý thuyết và ôn flashcard.",
   },
   {
     icon: "4️⃣",
@@ -34,7 +34,7 @@ const STEPS = [
   {
     icon: "5️⃣",
     title: "Lưu Sổ tay",
-    text: "Phản ứng đã khám phá được lưu vào Sổ tay, mở khóa danh hiệu Nhà Giả Kim Nhí.",
+    text: "Phản ứng đã khám phá được lưu vào Sổ tay, mở khóa danh hiệu Nhà Khoa Học Nhí.",
   },
 ] as const;
 
@@ -66,7 +66,7 @@ export default function HomePage() {
             🧪
           </span>
           <span className="font-display text-lg font-extrabold leading-none tracking-wide">
-            CHEMLAB
+            SCILAB
           </span>
           <span className="rounded-full bg-ink px-1.5 py-0.5 text-[11px] font-extrabold leading-none text-mustard">
             AI
@@ -98,7 +98,7 @@ export default function HomePage() {
         <div className="relative flex flex-col items-center gap-8 lg:flex-row">
           <div className="flex-1 text-center lg:text-left">
             <h1 className="font-display text-3xl font-extrabold leading-tight text-ink lg:text-5xl">
-              Phòng thí nghiệm hóa học{" "}
+              Phòng thí nghiệm khoa học{" "}
               <span className="relative inline-block text-terracotta">
                 ảo
                 <svg
@@ -116,13 +116,13 @@ export default function HomePage() {
                   />
                 </svg>
               </span>{" "}
-              cho học sinh THCS
+              cho học sinh lớp 8, 9
             </h1>
             <p className="mt-4 text-base font-medium leading-relaxed text-ink-soft">
-              Chọn 2 hóa chất, đổ vào cốc và xem hiện tượng thật mắt: bọt khí
-              sủi tách tách, kết tủa rơi như tuyết, khói tỏa lên... Không lo
-              cháy nổ, không cần mua hóa chất — lý thuyết SGK được AI phân tích
-              tận tình.
+              Hóa học: chọn 2 hóa chất, đổ vào cốc và xem hiện tượng thật mắt —
+              bọt khí, kết tủa, tỏa nhiệt. Vật lý và Toán: học lý thuyết, ôn
+              flashcard và luyện câu hỏi. Tất cả đều an toàn, không cần mua dụng
+              cụ — và được AI hỗ trợ tận tình.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <button
@@ -171,7 +171,7 @@ export default function HomePage() {
       <section aria-label="Hướng dẫn sử dụng">
         <h2 className="font-display text-center text-2xl font-extrabold text-ink">
           5 bước để trở thành{" "}
-          <span className="wavy-underline">Nhà Giả Kim Nhí</span>
+          <span className="wavy-underline">Nhà Khoa Học Nhí</span>
         </h2>
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           {STEPS.map((s, i) => (

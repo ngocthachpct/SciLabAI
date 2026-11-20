@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { badgeForCount } from "@/lib/badges";
 import type { ToastItem } from "@/components/ToastStack";
 
-const STORAGE_KEY = "chemlab.nickname";
+const STORAGE_KEY = "scilab.nickname";
+const LEGACY_STORAGE_KEY = "chemlab.nickname";
 const GUEST_NAME = "Khách";
 
 export interface SavedReaction {
@@ -32,6 +33,14 @@ export function useNotebook() {
     let stored = "";
     try {
       stored = window.localStorage.getItem(STORAGE_KEY) ?? "";
+      if (!stored) {
+        const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY) ?? "";
+        if (legacy) {
+          stored = legacy;
+          window.localStorage.setItem(STORAGE_KEY, legacy);
+          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+        }
+      }
     } catch {
       stored = "";
     }
@@ -95,14 +104,14 @@ export function useNotebook() {
   );
 
   /** Called when an experiment result with a reaction is revealed. */
-  const record = useCallback(
-    async (key: string): Promise<void> => {
+  const saveEntry = useCallback(
+    async (key: string, label?: string): Promise<void> => {
       const name = nameRef.current || GUEST_NAME;
       try {
         const res = await fetch("/api/notebook", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, key }),
+          body: JSON.stringify({ name, key, label }),
         });
         if (!res.ok) {
           pushToast("Không lưu được vào Sổ tay, thử lại nhé!", "error");
@@ -111,7 +120,7 @@ export function useNotebook() {
         const data = (await res.json()) as { count: number; isNew: boolean };
         setCount(data.count);
         if (data.isNew) {
-          pushToast("🔓 Mở khóa phản ứng mới!");
+          pushToast(label ? "🔓 Đã lưu nhiệm vụ mới vào Sổ tay!" : "🔓 Mở khóa phản ứng mới!");
           if (nameRef.current) void refresh(nameRef.current);
         }
       } catch {
@@ -119,6 +128,16 @@ export function useNotebook() {
       }
     },
     [refresh, pushToast]
+  );
+
+  const record = useCallback(
+    async (key: string): Promise<void> => saveEntry(key),
+    [saveEntry]
+  );
+
+  const recordTask = useCallback(
+    async (key: string, label: string): Promise<void> => saveEntry(key, label),
+    [saveEntry]
   );
 
   const badgeLabel = badgeForCount(count);
@@ -134,6 +153,7 @@ export function useNotebook() {
     dismissToast,
     setNickname,
     record,
+    recordTask,
     refresh,
   };
 }

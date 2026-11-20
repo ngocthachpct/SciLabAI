@@ -29,6 +29,7 @@ function TheoryClient() {
   const params = useSearchParams();
   const lessonId = params.get("lesson");
   const contentId = params.get("content");
+  const demo = params.get("demo") === "1";
   const lesson = getLesson(lessonId);
   const staticTheory = getLessonTheory(lessonId);
   const isMineOnly = Boolean(contentId && !isStaticContent(contentId) && !lesson);
@@ -115,6 +116,8 @@ function TheoryClient() {
           current="theory"
           contentId={contentId}
           lessonId={lesson?.id ?? null}
+          subject={payload?.subject ?? lesson?.subject ?? null}
+          demo={demo}
         />
         <Sparkle tone="#3f9e8d" size={16} delay="0.2s" />
       </header>

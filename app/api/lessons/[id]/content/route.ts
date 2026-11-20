@@ -54,6 +54,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   }
 
+  const sourceFilter = req.nextUrl.searchParams.get("source");
+  if (sourceFilter && !["demo", "ai", "import"].includes(sourceFilter)) {
+    return NextResponse.json({ error: "bad_source" }, { status: 400 });
+  }
+
   try {
     const cid = req.nextUrl.searchParams.get("cid");
     if (cid !== null && cid !== "") {
@@ -93,7 +98,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         ? await db`
             SELECT id, lesson_id, source, kind, file_name, payload, created_at
             FROM lesson_content
-            WHERE lesson_id = ${id} AND kind = ${kindParsed.data}
+            WHERE lesson_id = ${id}
+              AND kind = ${kindParsed.data}
+              AND (${sourceFilter}::text IS NULL OR source = ${sourceFilter})
             ORDER BY created_at DESC
             LIMIT 20
           `
@@ -101,6 +108,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             SELECT id, lesson_id, source, kind, file_name, payload, created_at
             FROM lesson_content
             WHERE lesson_id = ${id}
+              AND (${sourceFilter}::text IS NULL OR source = ${sourceFilter})
             ORDER BY created_at DESC
             LIMIT 20
           `

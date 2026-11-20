@@ -51,4 +51,5 @@ export type ReactResponse =
       key: string;
       result: ReactionResult;
     }
-  | { error: "fallback"; message: string };
+  | { error: "fallback"; message: string }
+  | { error: "pro_required"; message: string; upgradeUrl?: string };

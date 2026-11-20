@@ -12,7 +12,7 @@ interface WaveLoadingProps {
 }
 
 /**
- * Wave-scrolling letter loading — sticker / display-font ChemLab style.
+ * Wave-scrolling letter loading — sticker / display-font SciLab style.
  * Overlay floats fixed in the middle of the screen.
  */
 export function WaveLoading({
@@ -33,7 +33,7 @@ export function WaveLoading({
         {chars.map((ch, i) => (
           <span
             key={`${ch}-${i}`}
-            className="chemlab-wave-char inline-block"
+            className="scilab-wave-char inline-block"
             style={{ animationDelay: `${i * 0.08}s` }}
           >
             {ch === " " ? "\u00a0" : ch}
@@ -56,7 +56,7 @@ export function WaveLoading({
             {chars.map((ch, i) => (
               <span
                 key={`${ch}-${i}`}
-                className="chemlab-wave-char inline-block"
+                className="scilab-wave-char inline-block"
                 style={{ animationDelay: `${i * 0.08}s` }}
               >
                 {ch === " " ? "\u00a0" : ch}

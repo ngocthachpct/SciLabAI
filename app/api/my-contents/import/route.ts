@@ -9,6 +9,12 @@ import {
 } from "@/lib/content";
 import { generateCustomLessonContent } from "@/lib/gemini";
 import { getDb } from "@/lib/db";
+import { getClientIp } from "@/lib/requestIdentity";
+import {
+  canGenerate,
+  recordGeneration,
+  PRO_REQUIRED_MESSAGE,
+} from "@/lib/plan";
 
 export const runtime = "nodejs";
 
@@ -83,6 +89,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const ip = getClientIp(req);
+  const quota = await canGenerate(userId, ip);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: "pro_required",
+        message: PRO_REQUIRED_MESSAGE,
+        upgradeUrl: "/pro",
+        plan: quota.status,
+      },
+      { status: 402 }
+    );
+  }
+
   let payload: LessonPayload;
   try {
     payload = await generateCustomLessonContent(
@@ -102,6 +122,8 @@ export async function POST(req: NextRequest) {
           : "AI không đọc hiểu được tài liệu này. Em thử file bài giảng rõ hơn nhé!";
     return NextResponse.json({ error: "fallback", message: msg }, { status: 200 });
   }
+
+  await recordGeneration(userId, ip, "lesson_import");
 
   const db = getDb();
   if (!db) {

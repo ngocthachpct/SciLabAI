@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { ReactionResult } from "@/lib/schema";
 import type { Reagent } from "@/lib/reagents";
@@ -14,6 +15,8 @@ export interface Analysis {
   source: "local" | "cache" | "ai";
   /** Soft failure message (AI unavailable etc.) */
   message?: string;
+  /** Present when the free AI quota is exhausted */
+  upgradeUrl?: string;
   /** New reaction discovered => show unlock chip */
   isNew?: boolean;
 }
@@ -97,12 +100,23 @@ export function AnalysisPanel({ analysis, loading }: AnalysisPanelProps) {
       {analysis && analysis.message && !r && (
         <Block delay={0}>
           <div className="sticker-flat bg-paper-deep px-4 py-3 text-sm text-ink">
-            <p className="font-display font-extrabold">Ôi, có chút trục trặc!</p>
-            <p>{analysis.message}</p>
-            <p className="mt-1">
-              Gợi ý: thử trộn <b>CuSO4 + NaOH</b>, <b>Na2CO3 + HCl</b> hoặc{" "}
-              <b>Zn + CuSO4</b>.
+            <p className="font-display font-extrabold">
+              {analysis.upgradeUrl ? "Cần SciLab Pro" : "Ai, có chất trước trước!"}
             </p>
+            <p>{analysis.message}</p>
+            {analysis.upgradeUrl ? (
+              <Link
+                href={analysis.upgradeUrl}
+                className="sticker-btn mt-2 inline-block bg-terracotta px-4 py-2 text-xs text-white"
+              >
+                🚀 Nâng cấp Pro (demo)
+              </Link>
+            ) : (
+              <p className="mt-1">
+                Gợi ý: thử trộn <b>CuSO4 + NaOH</b>, <b>Na2CO3 + HCl</b> hoặc{" "}
+                <b>Zn + CuSO4</b>.
+              </p>
+            )}
           </div>
         </Block>
       )}
